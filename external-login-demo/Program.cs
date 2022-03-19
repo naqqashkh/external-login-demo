@@ -40,17 +40,17 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = configuration["JWT:ValidIssuer"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["JWT:Secret"]))
     };
-})
-.AddFacebook(facebookOptions =>
-{
-    facebookOptions.AppId = configuration["Authentication:Facebook:AppId"];
-    facebookOptions.AppSecret = configuration["Authentication:Facebook:AppSecret"];
-})
-.AddGoogle(options =>
-{
-    options.ClientId = configuration["Authentication:Google:ClientId"];
-    options.ClientSecret = configuration["Authentication:Google:ClientSecret"];
 });
+//.AddFacebook(facebookOptions =>
+//{
+//    facebookOptions.AppId = configuration["Authentication:Facebook:AppId"];
+//    facebookOptions.AppSecret = configuration["Authentication:Facebook:AppSecret"];
+//})
+//.AddGoogle(options =>
+//{
+//    options.ClientId = configuration["Authentication:Google:ClientId"];
+//    options.ClientSecret = configuration["Authentication:Google:ClientSecret"];
+//});
 
 
 builder.Services.AddControllers();
