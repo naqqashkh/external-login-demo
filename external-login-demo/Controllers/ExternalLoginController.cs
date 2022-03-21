@@ -25,8 +25,8 @@ namespace external_login_demo.Controllers
             _configuration = configuration;
         }
 
-        [HttpPost("facebook")]
-        public async Task<IActionResult> Facebook([FromBody] AuthCodeModel data)
+        [HttpPost("facebook/{authCode}")]
+        public async Task<IActionResult> Facebook(string authCode)
         {
             try
             {
@@ -38,8 +38,8 @@ namespace external_login_demo.Controllers
                 {
                     var content = new AuthCodeRequest()
                     {
-                        code = data.code,
-                        redirect_uri = data.redirect_uri,
+                        code = authCode,
+                        redirect_uri = _configuration["Authentication:Facebook:RedirectUri"],
                         client_id = _configuration["Authentication:Facebook:AppId"],
                         client_secret = _configuration["Authentication:Facebook:AppSecret"]
                     };
@@ -54,7 +54,7 @@ namespace external_login_demo.Controllers
                     }
                 }
 
-                //Get the user details using access token.
+                //Get the user details from Facebook using access token.
                 using (var httpClient = new HttpClient())
                 {
                     var content = new FacebookUserRequest()
@@ -120,7 +120,7 @@ namespace external_login_demo.Controllers
             {
                 GoogleUserResponse googleUser;
 
-                //Exchanging for an access token
+                //Get user from Google using access token
                 using (var httpClient = new HttpClient())
                 {
                     using (var response = await httpClient.GetAsync("https://www.googleapis.com/oauth2/v1/userinfo?access_token=" + accessToken))
@@ -133,7 +133,7 @@ namespace external_login_demo.Controllers
                     }
                 }
 
-                //Find User
+                //Find User in database
                 var user = await _userManager.FindByEmailAsync(googleUser.Email);
 
                 //If User not found then create user.
