@@ -1,4 +1,5 @@
 ﻿using external_login_demo.Auth;
+using external_login_demo.Auth.Google;
 using Google.Apis.Auth;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -88,17 +89,19 @@ namespace external_login_demo.Controllers
 
                     if (!result.Succeeded)
                         return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = "Error", Message = "User creation failed! Please check user details and try again." });
-
-                    result = await _userManager.AddLoginAsync(user, new UserLoginInfo("Facebook", facebookUser.id, "Facebook"));
-
-                    if (!result.Succeeded)
-                        return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = "Error", Message = "User creation failed! Please check user details and try again." });
                 }
 
                 var loginInfo = await _userManager.FindByLoginAsync("Facebook", facebookUser.id);
 
                 if (loginInfo is null)
-                    return StatusCode(StatusCodes.Status404NotFound, new Response { Status = "Error", Message = "Association with Facebook of this user not found." });
+                {
+                    var result = await _userManager.AddLoginAsync(user, new UserLoginInfo("Facebook", facebookUser.id, "Facebook"));
+
+                    if (!result.Succeeded)
+                        return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = "Error", Message = "User creation failed! Please check user details and try again." });
+
+                    loginInfo = await _userManager.FindByLoginAsync("Facebook", facebookUser.id);
+                }
 
                 //Create Claims and Token
 
@@ -110,15 +113,28 @@ namespace external_login_demo.Controllers
             }
         }
 
-        [HttpPost("google/{tokenId}")]
-        public async Task<IActionResult> Google(string tokenId)
+        [HttpPost("google/{accessToken}")]
+        public async Task<IActionResult> Google(string accessToken)
         {
             try
             {
-                var payload = GoogleJsonWebSignature.ValidateAsync(tokenId, new GoogleJsonWebSignature.ValidationSettings()).Result;
-                
+                GoogleUserResponse googleUser;
+
+                //Exchanging for an access token
+                using (var httpClient = new HttpClient())
+                {
+                    using (var response = await httpClient.GetAsync("https://www.googleapis.com/oauth2/v1/userinfo?access_token=" + accessToken))
+                    {
+                        if (!response.IsSuccessStatusCode)
+                            return StatusCode(Convert.ToInt32(response.StatusCode), new Response { Status = "Error", Message = response.ReasonPhrase });
+
+                        string apiResponse = await response.Content.ReadAsStringAsync();
+                        googleUser = JsonConvert.DeserializeObject<GoogleUserResponse>(apiResponse);
+                    }
+                }
+
                 //Find User
-                var user = await _userManager.FindByEmailAsync(payload.Email);
+                var user = await _userManager.FindByEmailAsync(googleUser.Email);
 
                 //If User not found then create user.
                 if (user == null)
@@ -126,47 +142,31 @@ namespace external_login_demo.Controllers
                     user = new IdentityUser()
                     {
                         SecurityStamp = Guid.NewGuid().ToString(),
-                        UserName = payload.Name,
-                        Email = payload.Email,
+                        UserName = googleUser.Email,
+                        Email = googleUser.Email,
                     };
 
                     var result = await _userManager.CreateAsync(user);
 
                     if (!result.Succeeded)
                         return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = "Error", Message = "User creation failed! Please check user details and try again." });
+                }
 
-                    //The provider key can be changed if desirable
-                    result = await _userManager.AddLoginAsync(user, new UserLoginInfo("Google", payload.Email, "Google"));
+                var loginInfo = await _userManager.FindByLoginAsync("Google", googleUser.Email);
+
+                if (loginInfo is null)
+                {
+                    var result = await _userManager.AddLoginAsync(user, new UserLoginInfo("Google", googleUser.Id, "Google"));
 
                     if (!result.Succeeded)
                         return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = "Error", Message = "User creation failed! Please check user details and try again." });
+
+                    loginInfo = await _userManager.FindByLoginAsync("Google", googleUser.Email);
                 }
-
-                var loginInfo = await _userManager.FindByLoginAsync("Google", payload.Email);
-
-                if (loginInfo is null)
-                    return StatusCode(StatusCodes.Status404NotFound, new Response { Status = "Error", Message = "Association with Google of this user not found." });
 
                 return Ok(new Response { Status = "Success", Message = "Authorized" });
 
-                //var claims = new[]
-                //{
-                //    new Claim(JwtRegisteredClaimNames.Sub, Security.Encrypt(AppSettings.appSettings.JwtEmailEncryption,user.email)),
-                //    new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                //};
-
-                //var key = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(AppSettings.appSettings.JwtSecret));
-                //var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-                //var token = new JwtSecurityToken(String.Empty,
-                //  String.Empty,
-                //  claims,
-                //  expires: DateTime.Now.AddSeconds(55 * 60),
-                //  signingCredentials: creds);
-                //return Ok(new
-                //{
-                //    token = new JwtSecurityTokenHandler().WriteToken(token)
-                //});
+                //Create claims and token
             }
             catch (Exception ex)
             {
